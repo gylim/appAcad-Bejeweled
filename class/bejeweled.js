@@ -29,32 +29,27 @@ class Bejeweled {
     Screen.addCommand('down', 'move cursor down', this.cursor.down.bind(this.cursor));
     Screen.addCommand('left', 'move cursor left', this.cursor.left.bind(this.cursor));
     Screen.addCommand('right', 'move cursor right', this.cursor.right.bind(this.cursor));
-    Screen.addCommand('return', 'select or swap', Bejeweled.swap.bind(this.cursor));
+    Screen.addCommand('return', 'select or swap', Bejeweled.trySwap.bind(this.cursor));
 
     this.cursor.setBackgroundColor();
     Screen.render();
   }
 
-  static swap() {
+  static trySwap() {
     const output = this.select();
     if (Bejeweled.selected === null) Bejeweled.selected = output;
     // check that selected fruit is different
     else if (JSON.stringify(Bejeweled.selected) !== JSON.stringify(output) && Array.isArray(Bejeweled.selected)) {
-      const possibleMoves = Bejeweled.validMoves(Bejeweled.selected);
+      const possibleMoves = Bejeweled.validMoves(Screen.grid, Bejeweled.selected);
       // check that move is valid
       if (possibleMoves.some(ele => JSON.stringify(ele) === JSON.stringify(output))) {
         // swap the fruit
-        const firstFruit = Screen.grid[Bejeweled.selected[0]][Bejeweled.selected[1]];
-        const secondFruit = Screen.grid[output[0]][output[1]];
-        Screen.setGrid(Bejeweled.selected[0], Bejeweled.selected[1], secondFruit);
-        Screen.setGrid(output[0], output[1], firstFruit);
-        Screen.render();
+        Bejeweled.swap(Screen.grid, Bejeweled.selected, output);
         // check that there is at least 1 three-in-a-row after swapping
         let check1 = Bejeweled.checkForMatches(Screen.grid);
         // reset swap if not valid
         if (check1 === false) {
-          Screen.setGrid(Bejeweled.selected[0], Bejeweled.selected[1], firstFruit);
-          Screen.setGrid(output[0], output[1], secondFruit);
+          Bejeweled.swap(Screen.grid, Bejeweled.selected, output);
           Screen.setMessage('Not a valid move, try again')
           Screen.render();
         } else {
@@ -76,6 +71,19 @@ class Bejeweled {
     }
   }
 
+  static swap(grid, firstCoord, secCoord) {
+    const firstFruit = grid[firstCoord[0]][firstCoord[1]];
+    const secondFruit = grid[secCoord[0]][secCoord[1]];
+    if (grid === Screen.grid) {
+      Screen.setGrid(firstCoord[0], firstCoord[1], secondFruit);
+      Screen.setGrid(secCoord[0], secCoord[1], firstFruit);
+      Screen.render();
+    } else {
+      grid[firstCoord[0]][firstCoord[1]] = secondFruit;
+      grid[secCoord[0]][secCoord[1]] = firstFruit;
+    }
+  }
+
   static checkForMoves(grid) {
     let copyGrid = JSON.parse(JSON.stringify(grid));
     const len = grid.length;
@@ -83,18 +91,14 @@ class Bejeweled {
     // iterate through grid
     for (let i=0; i<len; i++) {
       for (let j=0; j<width; j++) {
-        const possibleMoves = Bejeweled.validMoves([i, j]);
+        const possibleMoves = Bejeweled.validMoves(grid, [i, j]);
         for (let k=0; k<possibleMoves.length; k++) {
-          const testCoord = possibleMoves[k]
-          const firstFruit = copyGrid[i][j];
-          const secondFruit = copyGrid[testCoord[0]][testCoord[1]];
-          copyGrid[i][j] = secondFruit;
-          copyGrid[testCoord[0]][testCoord[1]] = firstFruit;
+          const testCoord = possibleMoves[k];
+          Bejeweled.swap(copyGrid, [i, j], testCoord);
           const test = Bejeweled.checkForMatches(copyGrid);
           if (test !== false) return true;
           else {
-            copyGrid[i][j] = firstFruit;
-            copyGrid[testCoord[0]][testCoord[1]] = secondFruit;
+            Bejeweled.swap(copyGrid, [i, j], testCoord);
           }
         }
       }
@@ -107,7 +111,7 @@ class Bejeweled {
     let multiplier = 1;
     while (check !== false) {
       multiplier++;
-      Bejeweled.removeMatches(check, multiplier);
+      Bejeweled.removeMatches(Screen.grid, check, multiplier);
       Screen.setMessage(`Your score is ${Bejeweled.score} with a multiplier of ${multiplier}!`);
       setTimeout(() => Screen.render(), 500);
       Bejeweled.gravityFruits(Screen.grid);
@@ -116,12 +120,12 @@ class Bejeweled {
     }
   }
 
-  static validMoves(coord) {
+  static validMoves(grid, coord) {
     let moves = [];
     if (coord[0]-1 >= 0) moves.push([coord[0]-1, coord[1]]);
-    if (coord[0]+1 < Screen.grid.length) moves.push([coord[0]+1, coord[1]]);
+    if (coord[0]+1 < grid.length) moves.push([coord[0]+1, coord[1]]);
     if (coord[1]-1 >= 0) moves.push([coord[0], coord[1]-1]);
-    if (coord[1]+1 < Screen.grid[0].length) moves.push([coord[0], coord[1]+1]);
+    if (coord[1]+1 < grid[0].length) moves.push([coord[0], coord[1]+1]);
     return moves;
   }
 
@@ -190,10 +194,11 @@ class Bejeweled {
     return pos;
   }
 
-  static removeMatches(result, multiplier) {
+  static removeMatches(grid, result, multiplier) {
     for (let i=0; i<result.length; i++) {
       const pos = result[i];
-      Screen.setGrid(pos.row, pos.col, ' ');
+      if (grid === Screen.grid) Screen.setGrid(pos.row, pos.col, ' ');
+      else grid[pos.row][pos.col] = ' ';
       Bejeweled.score += multiplier;
       setTimeout(() => Screen.render(), 500);
     }
@@ -210,7 +215,7 @@ class Bejeweled {
         // add empty blocks to the top of array
         workingCol.unshift(...Array(lastIdx - firstIdx + 1).fill(' '));
         // change the grid
-        workingCol.forEach((ele, idx) => Screen.setGrid(idx, j, ele));
+        workingCol.forEach((ele, idx) => grid[idx][j] = ele);
         setTimeout(() => Screen.render(), 500)
       }
     }
@@ -223,7 +228,7 @@ class Bejeweled {
       workingCol.forEach((ele, idx, arr) => {
         if (ele === ' ') {
           arr[idx] = Bejeweled.randomFruits(1);
-          Screen.setGrid(idx, j, arr[idx]);
+          grid[idx][j] = arr[idx];
         }
       });
       setTimeout(() => Screen.render(), 500);
